@@ -1,0 +1,1192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KRISHI DARPAN - Precision Agriculture 3D Ground Control Simulation</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- OrbitControls -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800&family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+        
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Rajdhani', sans-serif;
+            background-color: #080d1a;
+            color: #e2e8f0;
+        }
+
+        .font-orbitron { font-family: 'Orbitron', sans-serif; }
+        .font-mono-tech { font-family: 'JetBrains Mono', monospace; }
+
+        /* Glassmorphism Styling */
+        .glass-panel {
+            background: rgba(11, 19, 36, 0.82);
+            backdrop-filter: blur(14px);
+            border: 1px solid rgba(56, 189, 248, 0.22);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.45);
+        }
+
+        .glass-button {
+            background: rgba(30, 41, 59, 0.85);
+            border: 1px solid rgba(56, 189, 248, 0.28);
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .glass-button:hover:not(:disabled) {
+            background: rgba(14, 165, 233, 0.28);
+            border-color: #38bdf8;
+            box-shadow: 0 0 14px rgba(56, 189, 248, 0.35);
+        }
+
+        .glass-button.active {
+            background: linear-gradient(135deg, rgba(14, 165, 233, 0.45), rgba(16, 185, 129, 0.45));
+            border-color: #38bdf8;
+            box-shadow: 0 0 18px rgba(56, 189, 248, 0.55);
+        }
+
+        .glass-button:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+
+        /* Custom Range Input */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: rgba(15, 23, 42, 0.9);
+            height: 6px;
+            border-radius: 4px;
+            border: 1px solid rgba(56, 189, 248, 0.3);
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #38bdf8;
+            cursor: pointer;
+            box-shadow: 0 0 8px #38bdf8;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.6); }
+        ::-webkit-scrollbar-thumb { background: #0ea5e9; border-radius: 3px; }
+    </style>
+</head>
+<body class="select-none">
+
+    <!-- Canvas Container -->
+    <div id="canvas-container" class="absolute inset-0 z-0"></div>
+
+    <!-- UI Overlay Header -->
+    <header class="absolute top-0 left-0 right-0 p-3.5 z-10 flex flex-wrap justify-between items-center pointer-events-none gap-2">
+        <div class="glass-panel rounded-2xl px-4 py-2.5 pointer-events-auto flex items-center space-x-3 border-l-4 border-emerald-400">
+            <div class="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-emerald-400 text-lg font-bold">
+                <i class="fa-solid fa-camera"></i>
+            </div>
+            <div>
+                <div class="flex items-center space-x-2">
+                    <h1 class="font-orbitron font-bold text-base md:text-lg tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-sky-300 to-cyan-400">
+                        KRISHI DARPAN GCS
+                    </h1>
+                    <span id="sys-flight-badge" class="font-mono-tech text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                        ARMED • HOVER
+                    </span>
+                </div>
+                <p class="text-[11px] text-sky-300/80 tracking-widest uppercase">Autonomous Precision Agriculture • Observe ➔ Decide ➔ Spray</p>
+            </div>
+        </div>
+
+        <!-- Mode Buttons Header -->
+        <div class="glass-panel rounded-2xl p-1.5 pointer-events-auto flex flex-wrap gap-1.5">
+            <button id="btn-inspect" class="glass-button active px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2">
+                <i class="fa-solid fa-magnifying-glass text-sky-400"></i>
+                <span>3D Component Inspector</span>
+            </button>
+            <button id="btn-scan" class="glass-button px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2">
+                <i class="fa-solid fa-video text-yellow-400"></i>
+                <span>Crop Vision Scan</span>
+            </button>
+            <button id="btn-spray" class="glass-button px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2">
+                <i class="fa-solid fa-spray-can text-emerald-400"></i>
+                <span>VRT Smart Spray</span>
+            </button>
+        </div>
+
+        <!-- Link & Dashboard Communication Status Pill -->
+        <div class="glass-panel rounded-2xl px-3.5 py-2 pointer-events-auto hidden xl:flex items-center space-x-4 text-xs font-mono-tech">
+            <div>
+                <div class="text-[9px] text-slate-400 uppercase">TELEMETRY LINK</div>
+                <div class="text-emerald-400 font-semibold flex items-center gap-1.5">
+                    <span id="link-dot" class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span id="link-status">CONNECTED (20 Hz)</span>
+                </div>
+            </div>
+            <div class="h-6 w-[1px] bg-slate-700"></div>
+            <div>
+                <div class="text-[9px] text-slate-400 uppercase">SIGNAL / LATENCY</div>
+                <div id="link-metrics" class="text-sky-300">-54 dBm • 14 ms</div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Left Sidebar: Component Inspector & Flight Controls -->
+    <div class="absolute left-3.5 top-20 bottom-16 w-80 z-10 pointer-events-none flex flex-col justify-between gap-2.5">
+        
+        <!-- Components List Panel -->
+        <div id="inspector-panel" class="glass-panel rounded-2xl p-3.5 pointer-events-auto overflow-y-auto flex-1">
+            <div class="flex justify-between items-center mb-2.5 pb-1.5 border-b border-sky-500/20">
+                <h2 class="font-orbitron text-xs font-bold text-sky-300 uppercase tracking-wide flex items-center gap-2">
+                    <i class="fa-solid fa-microchip text-sky-400"></i> Subsystems (4-Arm Frame)
+                </h2>
+                <span class="text-[10px] text-slate-400">Click to Inspect</span>
+            </div>
+
+            <div class="space-y-1.5" id="component-list">
+                <!-- Dynamic Items Inserted via JS -->
+            </div>
+        </div>
+
+        <!-- Flight & Propulsion Control Deck -->
+        <div class="glass-panel rounded-2xl p-3.5 pointer-events-auto border-t-2 border-emerald-400/50">
+            <div class="flex justify-between items-center mb-2">
+                <span class="text-[11px] font-orbitron text-emerald-300 font-semibold uppercase flex items-center gap-1.5">
+                    <i class="fa-solid fa-sliders"></i> Flight & Motor Control
+                </span>
+                <button id="btn-arm-toggle" class="px-2.5 py-0.5 rounded text-[10px] font-orbitron font-bold bg-amber-500/20 text-amber-300 border border-amber-400/40 hover:bg-amber-500/30 transition">
+                    DISARM MOTORS
+                </button>
+            </div>
+
+            <!-- Target Altitude Control -->
+            <div class="mb-2.5">
+                <div class="flex justify-between text-[11px] font-mono-tech mb-1">
+                    <span class="text-slate-400">TARGET AGL ALTITUDE</span>
+                    <span id="target-alt-label" class="text-sky-300 font-bold">1.2 m</span>
+                </div>
+                <input id="slider-altitude" type="range" min="0.5" max="3.5" step="0.1" value="1.2" class="w-full">
+            </div>
+
+            <!-- Individual 4-Motor RPM Readout -->
+            <div class="grid grid-cols-4 gap-1.5 text-center font-mono-tech text-[10px]">
+                <div class="bg-slate-900/75 p-1.5 rounded border border-slate-700/60">
+                    <div class="text-slate-400">M1 FL</div>
+                    <div id="rpm-m1" class="text-sky-300 font-bold">4820</div>
+                </div>
+                <div class="bg-slate-900/75 p-1.5 rounded border border-slate-700/60">
+                    <div class="text-slate-400">M2 FR</div>
+                    <div id="rpm-m2" class="text-sky-300 font-bold">4820</div>
+                </div>
+                <div class="bg-slate-900/75 p-1.5 rounded border border-slate-700/60">
+                    <div class="text-slate-400">M3 RL</div>
+                    <div id="rpm-m3" class="text-sky-300 font-bold">4820</div>
+                </div>
+                <div class="bg-slate-900/75 p-1.5 rounded border border-slate-700/60">
+                    <div class="text-slate-400">M4 RR</div>
+                    <div id="rpm-m4" class="text-sky-300 font-bold">4820</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Sidebar: Subsystem Diagnostics & Live Telemetry -->
+    <div class="absolute right-3.5 top-20 bottom-16 w-80 md:w-96 z-10 pointer-events-none flex flex-col justify-between gap-2.5">
+        
+        <!-- Selected Component Info Card -->
+        <div id="info-card" class="glass-panel rounded-2xl p-4 pointer-events-auto border-r-4 border-sky-400 transition-all duration-300">
+            <div class="flex items-center space-x-3 mb-2">
+                <div id="info-icon" class="w-9 h-9 rounded-lg bg-sky-500/20 flex items-center justify-center text-sky-400 text-base">
+                    <i class="fa-solid fa-camera"></i>
+                </div>
+                <div>
+                    <h3 id="info-title" class="font-orbitron font-bold text-sm text-sky-200">RGB Vision Camera</h3>
+                    <p id="info-subtitle" class="text-[11px] text-sky-400/80 font-mono-tech">Phase 1: OBSERVE (Visual Monitoring)</p>
+                </div>
+            </div>
+            <p id="info-desc" class="text-xs text-slate-300 leading-relaxed mb-2.5">
+                Captures real-time downward RGB video frames of the crop canopy to detect leaf yellowing, discoloration, and pest damage patches.
+            </p>
+            <div id="info-spec" class="bg-slate-900/75 p-2.5 rounded-xl border border-slate-800 text-[11px] font-mono-tech text-emerald-300/90 whitespace-pre-line"></div>
+        </div>
+
+        <!-- Live Precision Agriculture Telemetry Matrix -->
+        <div class="glass-panel rounded-2xl p-3.5 pointer-events-auto border-t-2 border-sky-400/50">
+            <div class="text-[11px] font-orbitron text-sky-300 mb-2 font-semibold uppercase flex items-center justify-between">
+                <span>Live Camera & VRT Telemetry</span>
+                <span id="telemetry-clock" class="font-mono-tech text-[10px] text-slate-400">00:00:00</span>
+            </div>
+            <div class="grid grid-cols-2 gap-2 text-xs">
+                <!-- Distance / AGL Detection -->
+                <div class="bg-slate-900/70 p-2 rounded-lg border border-slate-700/60">
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-400 text-[10px]">DISTANCE / AGL</span>
+                        <span id="range-status" class="text-[9px] font-mono-tech text-emerald-400">LOCKED</span>
+                    </div>
+                    <span id="telemetry-alt" class="font-orbitron font-bold text-emerald-400 text-sm">1.20 m</span>
+                </div>
+
+                <!-- Live Camera Canopy Health Score -->
+                <div class="bg-slate-900/70 p-2 rounded-lg border border-slate-700/60">
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-400 text-[10px]">CANOPY HEALTH</span>
+                        <span id="health-badge" class="text-[9px] font-mono-tech text-emerald-400">OPTIMAL</span>
+                    </div>
+                    <span id="telemetry-health" class="font-orbitron font-bold text-sky-300 text-sm">92% Green</span>
+                </div>
+
+                <!-- Detected Crop Zone -->
+                <div class="bg-slate-900/70 p-2 rounded-lg border border-slate-700/60">
+                    <span class="text-slate-400 block text-[10px]">DETECTED ZONE</span>
+                    <span id="telemetry-zone" class="font-orbitron font-bold text-emerald-400 text-xs">Green (Healthy)</span>
+                </div>
+
+                <!-- Solenoid Spray Valve -->
+                <div class="bg-slate-900/70 p-2 rounded-lg border border-slate-700/60">
+                    <span class="text-slate-400 block text-[10px]">SOLENOID / FLOW</span>
+                    <span id="telemetry-spray" class="font-orbitron font-bold text-slate-400 text-xs">CLOSED (0.0 L/m)</span>
+                </div>
+
+                <!-- Tank Remaining -->
+                <div class="bg-slate-900/70 p-2 rounded-lg border border-slate-700/60">
+                    <span class="text-slate-400 block text-[10px]">TANK LEVEL (10L)</span>
+                    <span id="telemetry-tank" class="font-orbitron font-bold text-cyan-300 text-sm">10.00 L</span>
+                </div>
+
+                <!-- Chemical Saved -->
+                <div class="bg-slate-900/70 p-2 rounded-lg border border-slate-700/60">
+                    <span class="text-slate-400 block text-[10px]">CHEMICAL SAVED</span>
+                    <span id="telemetry-saved" class="font-orbitron font-bold text-yellow-400 text-sm">41.2 %</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottom Status Bar / Science Legend -->
+    <footer class="absolute bottom-3 left-3.5 right-3.5 z-10 pointer-events-none flex flex-wrap justify-between items-center text-xs gap-2">
+        <div class="glass-panel rounded-2xl px-4 py-2 pointer-events-auto flex flex-wrap items-center gap-4">
+            <span class="font-orbitron font-semibold text-gray-300 text-[11px] uppercase">Camera Vision Crop Zones:</span>
+            <div class="flex items-center space-x-1.5">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span>
+                <span class="text-emerald-300">Green (Healthy Leaf Color • Valve Closed)</span>
+            </div>
+            <div class="flex items-center space-x-1.5">
+                <span class="w-2.5 h-2.5 rounded-full bg-yellow-400 inline-block"></span>
+                <span class="text-yellow-300">Yellow (Leaf Discoloration • 50% PWM Mist)</span>
+            </div>
+            <div class="flex items-center space-x-1.5">
+                <span class="w-2.5 h-2.5 rounded-full bg-red-500 inline-block"></span>
+                <span class="text-red-400">Red (Severe Damage • 100% Targeted Dose)</span>
+            </div>
+        </div>
+
+        <div class="glass-panel rounded-2xl px-4 py-2 pointer-events-auto text-slate-400 text-[11px] flex items-center space-x-2">
+            <i class="fa-solid fa-microchip text-sky-400"></i>
+            <span>KRISHI DARPAN • 4-Arm Quadrotor Precision Platform</span>
+        </div>
+    </footer>
+
+    <!-- Main Logic Simulation Script -->
+    <script>
+        // --- Component Data Dictionary ---
+        const componentData = [
+            {
+                id: 'camera',
+                name: 'RGB Vision Camera',
+                subtitle: 'Phase 1: OBSERVE (Visual Monitoring)',
+                icon: 'fa-camera',
+                desc: 'Captures live downward RGB video frames of the crop canopy. Onboard image analysis classifies leaf color ratios (healthy green vs. yellowing or damaged patches) in real time.',
+                spec: '• Sensor: Downward RGB Vision Camera\n• Frame Rate: 30 FPS Live Canopy Feed\n• Output: Visual Crop Health & Zone Classification',
+                partNames: ['MultispectralCamera', 'LensGlass']
+            },
+            {
+                id: 'vrt',
+                name: 'VRT Microcontroller & AI Module',
+                subtitle: 'Phase 2: DECIDE (Edge Processing)',
+                icon: 'fa-brain',
+                desc: 'Variable Rate Technology (VRT) processor evaluates incoming camera frames and downward distance readings, calculating exact solenoid valve duty cycles within milliseconds.',
+                spec: '• Decision Loop: Closed-Loop Vision Matrix\n• Inference Latency: 14 ms\n• Chemical Reduction: ~38% - 45% Saved',
+                partNames: ['VRTBox']
+            },
+            {
+                id: 'nozzle',
+                name: 'Solenoid Spray Valves & Nozzles',
+                subtitle: 'Phase 3: SPRAY (Precision Actuation)',
+                icon: 'fa-spray-can',
+                desc: 'Dual precision atomizing nozzles controlled by fast-acting solenoid valves. Remains completely shut over healthy Green crops and pulses proportionally over Yellow and Red stress zones.',
+                spec: '• Droplet Atomization: Fine Mist Cone\n• Actuation: PWM Variable Flow (0–1.2 L/min)\n• Benefit: Eliminates runoff & over-spraying',
+                partNames: ['NozzleLeft', 'NozzleRight', 'SprayPipe']
+            },
+            {
+                id: 'tank',
+                name: 'Liquid Tank & Flow Pump',
+                subtitle: 'Payload & Fluid Delivery',
+                icon: 'fa-bottle-water',
+                desc: 'Center-mounted 10-Liter chemical reservoir with integrated diaphragm pump providing steady line pressure to the spray boom.',
+                spec: '• Capacity: 10.0 Liters (Live Monitored)\n• Operating Pressure: 0.4 MPa\n• Mounting: CoG-Aligned Underslung Frame',
+                partNames: ['LiquidTank', 'TankCap']
+            },
+            {
+                id: 'gps',
+                name: 'Navigation & Flight Controller',
+                subtitle: 'Position & Distance Hold',
+                icon: 'fa-satellite',
+                desc: 'Maintains stable waypoint navigation and smooth terrain-following altitude hold using fused inertial and downward distance sensor telemetry.',
+                spec: '• Navigation: Autonomous Grid Waypoints\n• Altitude Hold: ±0.05 m Precision\n• Telemetry Link: Bidirectional Ground Control',
+                partNames: ['GPSDome', 'GPSStem']
+            },
+            {
+                id: 'motors',
+                name: '4x BLDC Motors & Propellers',
+                subtitle: 'Quadrotor Propulsion System',
+                icon: 'fa-fan',
+                desc: 'Four high-torque Brushless DC (BLDC) motors arranged in an X-quadrotor layout with differential Electronic Speed Controllers (ESC) for smooth pitch, roll, and altitude response.',
+                spec: '• Configuration: 4-Arm Quadrotor (X-Frame)\n• Hover Throttle: ~4,820 RPM\n• Control: Differential ESC Thrust Mixing',
+                partNames: ['Propeller', 'MotorHousing']
+            }
+        ];
+
+        // --- Three.js & Simulation Globals ---
+        let scene, camera, renderer, controls;
+        let droneGroup, fieldMesh, scanBeamMesh, sprayParticlesGroup;
+        let propsList = [];
+        let blurDiscsList = [];
+        let currentMode = 'inspect'; // 'inspect', 'scan', 'spray'
+        let flightTime = 0;
+        let lastFrameTime = performance.now();
+
+        // Realistic Flight & System State
+        const simState = {
+            armed: true,
+            targetAltitude: 1.2,
+            currentAltitude: 1.2,
+            verticalVelocity: 0,
+            posX: 0,
+            posZ: 0,
+            velX: 0,
+            velZ: 0,
+            pitch: 0,
+            roll: 0,
+            yaw: 0,
+            motorRPMs: [4820, 4820, 4820, 4820],
+            targetRPMs: [4820, 4820, 4820, 4820],
+            tankLiters: 10.0,
+            totalFlightDistance: 0,
+            sprayedDistance: 0,
+            healthPct: 92,
+            aglDistance: 1.2,
+            activeZone: 'Green (Healthy)',
+            valveDuty: 0, // 0, 0.5, 1.0
+            lastTelemetryUpdate: 0
+        };
+
+        // Spray Particle System
+        const SPRAY_COUNT = 150;
+
+        // Initialize App
+        function init() {
+            const container = document.getElementById('canvas-container');
+
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0a0f1d);
+            scene.fog = new THREE.FogExp2(0x0a0f1d, 0.035);
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
+            camera.position.set(2.8, 2.2, 3.5);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            // Orbit Controls
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.maxPolarAngle = Math.PI / 2 - 0.02;
+            controls.minDistance = 1.2;
+            controls.maxDistance = 15;
+            controls.target.set(0, 0.8, 0);
+
+            // Lights
+            setupLights();
+
+            // Build Environment & Drone (Keeping exact physical design, 4 arms only)
+            createFarmField();
+            createDroneModel();
+            createScanBeam();
+            createSpraySystem();
+
+            // UI Setup
+            renderComponentList();
+            setupEventListeners();
+            selectComponent('camera');
+
+            // Start Animation Loop
+            animate();
+        }
+
+        // --- Lighting ---
+        function setupLights() {
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+            scene.add(ambientLight);
+
+            const mainLight = new THREE.DirectionalLight(0xffffff, 1.2);
+            mainLight.position.set(5, 10, 5);
+            mainLight.castShadow = true;
+            mainLight.shadow.mapSize.width = 2048;
+            mainLight.shadow.mapSize.height = 2048;
+            mainLight.shadow.bias = -0.0001;
+            scene.add(mainLight);
+
+            const fillLight = new THREE.DirectionalLight(0x38bdf8, 0.5);
+            fillLight.position.set(-5, 5, -5);
+            scene.add(fillLight);
+
+            const pointLight = new THREE.PointLight(0x10b981, 1, 5);
+            pointLight.position.set(0, 1, 0);
+            scene.add(pointLight);
+        }
+
+        // --- Create Farm Field with Health Zones ---
+        function createFarmField() {
+            const fieldWidth = 14;
+            const fieldDepth = 14;
+
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+
+            // Background Green (Healthy)
+            ctx.fillStyle = '#15803d';
+            ctx.fillRect(0, 0, 512, 512);
+
+            // Yellow Zone (Moderate stress patch)
+            const grad1 = ctx.createRadialGradient(180, 200, 20, 180, 200, 140);
+            grad1.addColorStop(0, '#eab308');
+            grad1.addColorStop(1, 'transparent');
+            ctx.fillStyle = grad1;
+            ctx.beginPath();
+            ctx.arc(180, 200, 140, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Red Zone (Severe disease patch)
+            const grad2 = ctx.createRadialGradient(360, 340, 10, 360, 340, 110);
+            grad2.addColorStop(0, '#ef4444');
+            grad2.addColorStop(1, 'transparent');
+            ctx.fillStyle = grad2;
+            ctx.beginPath();
+            ctx.arc(360, 340, 110, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Crop rows detail grid
+            ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+            ctx.lineWidth = 4;
+            for (let i = 0; i < 512; i += 16) {
+                ctx.beginPath();
+                ctx.moveTo(i, 0);
+                ctx.lineTo(i, 512);
+                ctx.stroke();
+            }
+
+            const fieldTexture = new THREE.CanvasTexture(canvas);
+            
+            const planeGeo = new THREE.PlaneGeometry(fieldWidth, fieldDepth, 32, 32);
+            const planeMat = new THREE.MeshStandardMaterial({
+                map: fieldTexture,
+                roughness: 0.8,
+                metalness: 0.1
+            });
+
+            fieldMesh = new THREE.Mesh(planeGeo, planeMat);
+            fieldMesh.rotation.x = -Math.PI / 2;
+            fieldMesh.position.y = 0;
+            fieldMesh.receiveShadow = true;
+            scene.add(fieldMesh);
+
+            // Add 3D Crop Plants
+            const cropGeo = new THREE.ConeGeometry(0.12, 0.3, 4);
+            const cropMat = new THREE.MeshLambertMaterial({ color: 0x22c55e });
+            const instancedCrops = new THREE.InstancedMesh(cropGeo, cropMat, 400);
+
+            const dummy = new THREE.Object3D();
+            let index = 0;
+            for (let x = -6; x <= 6; x += 0.65) {
+                for (let z = -6; z <= 6; z += 0.65) {
+                    if (index >= 400) break;
+                    dummy.position.set(x + (Math.random() - 0.5) * 0.1, 0.15, z + (Math.random() - 0.5) * 0.1);
+                    dummy.rotation.y = Math.random() * Math.PI;
+                    dummy.scale.setScalar(0.8 + Math.random() * 0.5);
+                    dummy.updateMatrix();
+                    instancedCrops.setMatrixAt(index++, dummy.matrix);
+                }
+            }
+            instancedCrops.receiveShadow = true;
+            scene.add(instancedCrops);
+
+            const gridHelper = new THREE.GridHelper(fieldWidth, 14, 0x38bdf8, 0x1e293b);
+            gridHelper.position.y = 0.01;
+            scene.add(gridHelper);
+        }
+
+        // --- Create Drone Model (Exact Physical Proportions, Strictly 4 Arms) ---
+        function createDroneModel() {
+            droneGroup = new THREE.Group();
+            droneGroup.position.set(0, 1.2, 0);
+
+            // Materials
+            const carbonMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.3, metalness: 0.8 });
+            const metallicMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.2, metalness: 0.9 });
+            const whitePlastic = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.4 });
+            const glassMat = new THREE.MeshPhysicalMaterial({ color: 0x0284c7, transmission: 0.9, opacity: 1, transparent: true, roughness: 0 });
+            const accentCyan = new THREE.MeshStandardMaterial({ color: 0x0ea5e9, roughness: 0.3, emissive: 0x0284c7, emissiveIntensity: 0.4 });
+            const cyanGlass = new THREE.MeshPhysicalMaterial({ color: 0x38bdf8, transmission: 0.8, transparent: true, roughness: 0.2 });
+
+            // 1. Central Chassis Frame
+            const chassisGeo = new THREE.CylinderGeometry(0.35, 0.4, 0.18, 8);
+            const chassis = new THREE.Mesh(chassisGeo, whitePlastic);
+            chassis.castShadow = true;
+            chassis.name = 'Chassis';
+            droneGroup.add(chassis);
+
+            // Top Cover Ring Accent
+            const ringGeo = new THREE.TorusGeometry(0.32, 0.02, 8, 24);
+            const ring = new THREE.Mesh(ringGeo, accentCyan);
+            ring.rotation.x = Math.PI / 2;
+            ring.position.y = 0.09;
+            droneGroup.add(ring);
+
+            // 2. Arms & Motors (Strictly 4 Arms in X-Configuration)
+            const numArms = 4;
+            const armRadius = 0.95;
+            const armAngles = [Math.PI / 4, (3 * Math.PI) / 4, (5 * Math.PI) / 4, (7 * Math.PI) / 4];
+
+            for (let i = 0; i < numArms; i++) {
+                const angle = armAngles[i];
+                const armGroup = new THREE.Group();
+                armGroup.rotation.y = angle;
+
+                // Carbon Fiber Arm Tube
+                const armGeo = new THREE.CylinderGeometry(0.022, 0.022, armRadius, 12);
+                const arm = new THREE.Mesh(armGeo, carbonMat);
+                arm.rotation.z = Math.PI / 2;
+                arm.position.x = armRadius / 2;
+                arm.castShadow = true;
+                armGroup.add(arm);
+
+                // Motor Housing Base
+                const motorGeo = new THREE.CylinderGeometry(0.06, 0.06, 0.08, 16);
+                const motor = new THREE.Mesh(motorGeo, metallicMat);
+                motor.position.x = armRadius;
+                motor.position.y = 0.04;
+                motor.name = 'MotorHousing';
+                armGroup.add(motor);
+
+                // Motor Top Spinner Cap
+                const motorCapGeo = new THREE.CylinderGeometry(0.03, 0.05, 0.03, 16);
+                const motorCap = new THREE.Mesh(motorCapGeo, accentCyan);
+                motorCap.position.x = armRadius;
+                motorCap.position.y = 0.09;
+                armGroup.add(motorCap);
+
+                // Propeller Pair
+                const propGroup = new THREE.Group();
+                propGroup.position.set(armRadius, 0.11, 0);
+                propGroup.name = 'Propeller';
+
+                const propGeo = new THREE.BoxGeometry(0.55, 0.005, 0.04);
+                const prop1 = new THREE.Mesh(propGeo, carbonMat);
+                propGroup.add(prop1);
+
+                // Semi-transparent propeller motion blur disc
+                const blurGeo = new THREE.CylinderGeometry(0.28, 0.28, 0.001, 24);
+                const blurMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.15 });
+                const blurDisc = new THREE.Mesh(blurGeo, blurMat);
+                propGroup.add(blurDisc);
+                blurDiscsList.push(blurMat);
+
+                armGroup.add(propGroup);
+                propsList.push(propGroup);
+
+                droneGroup.add(armGroup);
+            }
+
+            // 3. Landing Gear Skids
+            const legGeo = new THREE.CylinderGeometry(0.015, 0.015, 0.5, 8);
+            const skidGeo = new THREE.CylinderGeometry(0.015, 0.015, 1.1, 8);
+
+            [-0.35, 0.35].forEach((xPos) => {
+                const leg1 = new THREE.Mesh(legGeo, carbonMat);
+                leg1.position.set(xPos, -0.22, 0.25);
+                leg1.rotation.z = xPos > 0 ? -0.2 : 0.2;
+                droneGroup.add(leg1);
+
+                const leg2 = new THREE.Mesh(legGeo, carbonMat);
+                leg2.position.set(xPos, -0.22, -0.25);
+                leg2.rotation.z = xPos > 0 ? -0.2 : 0.2;
+                droneGroup.add(leg2);
+
+                const skid = new THREE.Mesh(skidGeo, carbonMat);
+                skid.rotation.x = Math.PI / 2;
+                skid.position.set(xPos * 1.25, -0.45, 0);
+                droneGroup.add(skid);
+            });
+
+            // 4. GPS / Antenna Dome Top
+            const gpsStem = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.18, 8), metallicMat);
+            gpsStem.position.set(0, 0.18, -0.15);
+            gpsStem.name = 'GPSStem';
+            droneGroup.add(gpsStem);
+
+            const gpsDome = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.04, 16), whitePlastic);
+            gpsDome.position.set(0, 0.27, -0.15);
+            gpsDome.name = 'GPSDome';
+            droneGroup.add(gpsDome);
+
+            // 5. Liquid Chemical Tank (Bottom)
+            const tankGeo = new THREE.SphereGeometry(0.24, 16, 16);
+            tankGeo.scale(1.2, 0.7, 1);
+            const liquidTank = new THREE.Mesh(tankGeo, cyanGlass);
+            liquidTank.position.set(0, -0.12, 0);
+            liquidTank.name = 'LiquidTank';
+            droneGroup.add(liquidTank);
+
+            const tankCap = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.03, 12), accentCyan);
+            tankCap.position.set(0, -0.01, 0.18);
+            tankCap.name = 'TankCap';
+            droneGroup.add(tankCap);
+
+            // 6. RGB Vision Camera Module (Front / Bottom)
+            const camMountGeo = new THREE.BoxGeometry(0.12, 0.1, 0.12);
+            const camMount = new THREE.Mesh(camMountGeo, carbonMat);
+            camMount.position.set(0, -0.22, 0.22);
+            droneGroup.add(camMount);
+
+            const cameraSphere = new THREE.Mesh(new THREE.SphereGeometry(0.065, 16, 16), metallicMat);
+            cameraSphere.position.set(0, -0.26, 0.25);
+            cameraSphere.name = 'MultispectralCamera';
+
+            const lensGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.02, 12);
+            const lens1 = new THREE.Mesh(lensGeo, glassMat);
+            lens1.rotation.x = Math.PI / 2;
+            lens1.position.set(-0.025, -0.01, 0.055);
+            lens1.name = 'LensGlass';
+            cameraSphere.add(lens1);
+
+            const lens2 = new THREE.Mesh(lensGeo, glassMat);
+            lens2.rotation.x = Math.PI / 2;
+            lens2.position.set(0.025, -0.01, 0.055);
+            lens2.name = 'LensGlass';
+            cameraSphere.add(lens2);
+
+            droneGroup.add(cameraSphere);
+
+            // 7. VRT Processing Unit Box
+            const vrtGeo = new THREE.BoxGeometry(0.14, 0.06, 0.14);
+            const vrtBox = new THREE.Mesh(vrtGeo, carbonMat);
+            vrtBox.position.set(0, 0.09, 0.12);
+            vrtBox.name = 'VRTBox';
+            droneGroup.add(vrtBox);
+
+            // 8. Spray Boom & Nozzles
+            const pipeGeo = new THREE.CylinderGeometry(0.01, 0.01, 1.4, 8);
+            const sprayPipe = new THREE.Mesh(pipeGeo, metallicMat);
+            sprayPipe.rotation.z = Math.PI / 2;
+            sprayPipe.position.set(0, -0.32, -0.1);
+            sprayPipe.name = 'SprayPipe';
+            droneGroup.add(sprayPipe);
+
+            const nozzleGeo = new THREE.CylinderGeometry(0.025, 0.015, 0.06, 8);
+            const nozzleLeft = new THREE.Mesh(nozzleGeo, accentCyan);
+            nozzleLeft.position.set(-0.6, -0.35, -0.1);
+            nozzleLeft.name = 'NozzleLeft';
+            droneGroup.add(nozzleLeft);
+
+            const nozzleRight = new THREE.Mesh(nozzleGeo, accentCyan);
+            nozzleRight.position.set(0.6, -0.35, -0.1);
+            nozzleRight.name = 'NozzleRight';
+            droneGroup.add(nozzleRight);
+
+            scene.add(droneGroup);
+        }
+
+        // --- Camera Field-of-View (FOV) Cone ---
+        function createScanBeam() {
+            const beamGeo = new THREE.ConeGeometry(1.2, 2.2, 16, 1, true);
+            const beamMat = new THREE.MeshBasicMaterial({
+                color: 0x38bdf8,
+                transparent: true,
+                opacity: 0.3,
+                side: THREE.DoubleSide,
+                depthWrite: false
+            });
+
+            scanBeamMesh = new THREE.Mesh(beamGeo, beamMat);
+            scanBeamMesh.position.set(0, -1.1, 0.25);
+            scanBeamMesh.visible = false;
+            droneGroup.add(scanBeamMesh);
+        }
+
+        // --- Liquid Spray Mist Particle System ---
+        function createSpraySystem() {
+            sprayParticlesGroup = new THREE.Group();
+            const particleGeo = new THREE.BufferGeometry();
+            const positions = new Float32Array(SPRAY_COUNT * 3);
+            const velocities = [];
+
+            for (let i = 0; i < SPRAY_COUNT; i++) {
+                const isLeft = i % 2 === 0;
+                positions[i * 3] = isLeft ? -0.6 : 0.6;
+                positions[i * 3 + 1] = -0.35;
+                positions[i * 3 + 2] = -0.1;
+
+                velocities.push({
+                    x: (Math.random() - 0.5) * 0.03,
+                    y: -0.04 - Math.random() * 0.03,
+                    z: (Math.random() - 0.5) * 0.03,
+                    isLeft: isLeft
+                });
+            }
+
+            particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+            const particleMat = new THREE.PointsMaterial({
+                color: 0x38bdf8,
+                size: 0.04,
+                transparent: true,
+                opacity: 0.75,
+                blending: THREE.AdditiveBlending
+            });
+
+            const particleSystem = new THREE.Points(particleGeo, particleMat);
+            sprayParticlesGroup.add(particleSystem);
+            sprayParticlesGroup.userData = { velocities: velocities };
+            sprayParticlesGroup.visible = false;
+
+            droneGroup.add(sprayParticlesGroup);
+        }
+
+        // --- UI Rendering & Interactions ---
+        function renderComponentList() {
+            const listContainer = document.getElementById('component-list');
+            listContainer.innerHTML = '';
+
+            componentData.forEach((item) => {
+                const btn = document.createElement('div');
+                btn.className = `component-item glass-button p-2 rounded-xl cursor-pointer flex items-center space-x-2.5 transition-all text-xs`;
+                btn.dataset.id = item.id;
+                btn.innerHTML = `
+                    <div class="w-7 h-7 rounded-lg bg-sky-500/20 flex items-center justify-center text-sky-400 text-xs">
+                        <i class="fa-solid ${item.icon}"></i>
+                    </div>
+                    <div class="flex-1">
+                        <div class="font-bold text-slate-200 leading-tight">${item.name}</div>
+                        <div class="text-[10px] text-sky-400/75 font-mono-tech">${item.subtitle.split(':')[0]}</div>
+                    </div>
+                `;
+
+                btn.addEventListener('click', () => {
+                    selectComponent(item.id);
+                });
+
+                listContainer.appendChild(btn);
+            });
+        }
+
+        function selectComponent(id) {
+            const data = componentData.find(c => c.id === id);
+            if (!data) return;
+
+            document.querySelectorAll('.component-item').forEach(el => {
+                if (el.dataset.id === id) {
+                    el.classList.add('border-sky-400', 'bg-sky-500/20');
+                } else {
+                    el.classList.remove('border-sky-400', 'bg-sky-500/20');
+                }
+            });
+
+            document.getElementById('info-title').innerText = data.name;
+            document.getElementById('info-subtitle').innerText = data.subtitle;
+            document.getElementById('info-desc').innerText = data.desc;
+            document.getElementById('info-spec').innerText = data.spec;
+            document.getElementById('info-icon').innerHTML = `<i class="fa-solid ${data.icon}"></i>`;
+
+            highlight3DPart(data.partNames);
+        }
+
+        function highlight3DPart(partNames) {
+            droneGroup.traverse((child) => {
+                if (child.isMesh && child.material && child.userData.originalEmissive !== undefined) {
+                    child.material.emissive.setHex(child.userData.originalEmissive);
+                }
+            });
+
+            partNames.forEach(pName => {
+                droneGroup.traverse((child) => {
+                    if (child.name === pName && child.isMesh) {
+                        if (child.userData.originalEmissive === undefined) {
+                            child.userData.originalEmissive = child.material.emissive ? child.material.emissive.getHex() : 0x000000;
+                        }
+                        if (child.material.emissive) {
+                            child.material.emissive.setHex(0x38bdf8);
+                        }
+                    }
+                });
+            });
+        }
+
+        // --- Modes & Controls Handling ---
+        function setMode(mode) {
+            currentMode = mode;
+
+            document.getElementById('btn-inspect').classList.toggle('active', mode === 'inspect');
+            document.getElementById('btn-scan').classList.toggle('active', mode === 'scan');
+            document.getElementById('btn-spray').classList.toggle('active', mode === 'spray');
+
+            const slider = document.getElementById('slider-altitude');
+
+            if (mode === 'inspect') {
+                scanBeamMesh.visible = false;
+                sprayParticlesGroup.visible = false;
+                simState.targetAltitude = parseFloat(slider.value);
+            } else if (mode === 'scan') {
+                if (!simState.armed) toggleArmState(true);
+                scanBeamMesh.visible = true;
+                sprayParticlesGroup.visible = false;
+                simState.targetAltitude = 2.2;
+                slider.value = '2.2';
+                document.getElementById('target-alt-label').innerText = '2.2 m';
+                selectComponent('camera');
+            } else if (mode === 'spray') {
+                if (!simState.armed) toggleArmState(true);
+                scanBeamMesh.visible = true;
+                simState.targetAltitude = 1.6;
+                slider.value = '1.6';
+                document.getElementById('target-alt-label').innerText = '1.6 m';
+                selectComponent('nozzle');
+            }
+            updateFlightBadge();
+        }
+
+        function toggleArmState(forceState) {
+            simState.armed = typeof forceState === 'boolean' ? forceState : !simState.armed;
+            const armBtn = document.getElementById('btn-arm-toggle');
+
+            if (simState.armed) {
+                armBtn.innerText = 'DISARM MOTORS';
+                armBtn.className = 'px-2.5 py-0.5 rounded text-[10px] font-orbitron font-bold bg-amber-500/20 text-amber-300 border border-amber-400/40 hover:bg-amber-500/30 transition';
+                simState.targetAltitude = parseFloat(document.getElementById('slider-altitude').value);
+            } else {
+                armBtn.innerText = 'ARM MOTORS';
+                armBtn.className = 'px-2.5 py-0.5 rounded text-[10px] font-orbitron font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 hover:bg-emerald-500/30 transition';
+                if (currentMode !== 'inspect') setMode('inspect');
+                simState.targetAltitude = 0.46; // Resting skid height
+            }
+            updateFlightBadge();
+        }
+
+        function updateFlightBadge() {
+            const badge = document.getElementById('sys-flight-badge');
+            if (!simState.armed) {
+                badge.innerText = 'DISARMED • STANDBY';
+                badge.className = 'font-mono-tech text-[10px] px-2 py-0.5 rounded bg-slate-700/60 text-slate-300 border border-slate-500/40';
+                return;
+            }
+            if (currentMode === 'inspect') {
+                badge.innerText = 'ARMED • ALT HOLD';
+                badge.className = 'font-mono-tech text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
+            } else if (currentMode === 'scan') {
+                badge.innerText = 'AUTO • VISION SCAN';
+                badge.className = 'font-mono-tech text-[10px] px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/40';
+            } else if (currentMode === 'spray') {
+                badge.innerText = 'AUTO • VRT SPRAY';
+                badge.className = 'font-mono-tech text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40';
+            }
+        }
+
+        function setupEventListeners() {
+            document.getElementById('btn-inspect').addEventListener('click', () => setMode('inspect'));
+            document.getElementById('btn-scan').addEventListener('click', () => setMode('scan'));
+            document.getElementById('btn-spray').addEventListener('click', () => setMode('spray'));
+            document.getElementById('btn-arm-toggle').addEventListener('click', () => toggleArmState());
+
+            const altSlider = document.getElementById('slider-altitude');
+            altSlider.addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                document.getElementById('target-alt-label').innerText = val.toFixed(1) + ' m';
+                if (simState.armed) {
+                    simState.targetAltitude = val;
+                }
+            });
+
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // --- Spatial Field Health & Distance Evaluation ---
+        function evaluateFieldUnderDrone(x, z) {
+            // Red Zone center around (2.8, 2.3), Yellow Zone center around (-2.1, -1.5)
+            const distToRed = Math.hypot(x - 2.8, z - 2.3);
+            const distToYellow = Math.hypot(x - (-2.1), z - (-1.5));
+
+            // Canopy height micro-variation for realistic distance readout
+            const canopyRipple = (Math.sin(x * 3.1) * Math.cos(z * 2.7)) * 0.03;
+            const agl = Math.max(0.0, simState.currentAltitude - 0.15 + canopyRipple);
+
+            let healthPct = Math.round(92 + Math.sin(x * 1.5 + z) * 4);
+            let zone = 'Green (Healthy)';
+            let duty = 0;
+
+            if (distToRed < 2.1) {
+                const severity = 1 - (distToRed / 2.1);
+                healthPct = Math.round(34 - severity * 16);
+                zone = 'Red (Severe Damage)';
+                duty = 1.0;
+            } else if (distToYellow < 2.2) {
+                const stress = 1 - (distToYellow / 2.2);
+                healthPct = Math.round(68 - stress * 22);
+                zone = 'Yellow (Leaf Stress)';
+                duty = 0.5;
+            }
+
+            return { healthPct, zone, duty, agl };
+        }
+
+        // --- Main Animation & Physics Loop ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const now = performance.now();
+            const dt = Math.min((now - lastFrameTime) / 1000, 0.05);
+            lastFrameTime = now;
+            flightTime += dt;
+
+            // 1. Determine Desired Flight Trajectory
+            let desiredX = 0;
+            let desiredZ = 0;
+
+            if (simState.armed && currentMode === 'scan') {
+                const radius = 3.6;
+                desiredX = Math.sin(flightTime * 0.45) * radius;
+                desiredZ = Math.cos(flightTime * 0.28) * radius;
+            } else if (simState.armed && currentMode === 'spray') {
+                desiredX = Math.sin(flightTime * 0.4) * 3.3;
+                desiredZ = Math.cos(flightTime * 0.4) * 3.3;
+            }
+
+            // Smooth horizontal velocity & position damping
+            const prevX = simState.posX;
+            const prevZ = simState.posZ;
+            simState.posX += (desiredX - simState.posX) * Math.min(1, dt * 2.4);
+            simState.posZ += (desiredZ - simState.posZ) * Math.min(1, dt * 2.4);
+
+            const vx = (simState.posX - prevX) / Math.max(dt, 0.001);
+            const vz = (simState.posZ - prevZ) / Math.max(dt, 0.001);
+            const stepDist = Math.hypot(simState.posX - prevX, simState.posZ - prevZ);
+
+            // Smooth vertical altitude control with hover micro-stabilization
+            const hoverRipple = simState.armed ? Math.sin(flightTime * 3.2) * 0.018 : 0;
+            const altError = (simState.targetAltitude + hoverRipple) - simState.currentAltitude;
+            simState.verticalVelocity += (altError * 4.5 - simState.verticalVelocity * 3.2) * dt;
+            simState.currentAltitude = Math.max(0.46, simState.currentAltitude + simState.verticalVelocity * dt);
+
+            // Attitude (Pitch & Roll proportional to acceleration/velocity)
+            const targetRoll = simState.armed ? THREE.MathUtils.clamp(-vx * 0.075, -0.22, 0.22) : 0;
+            const targetPitch = simState.armed ? THREE.MathUtils.clamp(vz * 0.075, -0.22, 0.22) : 0;
+            simState.roll += (targetRoll - simState.roll) * Math.min(1, dt * 6);
+            simState.pitch += (targetPitch - simState.pitch) * Math.min(1, dt * 6);
+
+            // Apply transforms to droneGroup
+            droneGroup.position.set(simState.posX, simState.currentAltitude, simState.posZ);
+            droneGroup.rotation.z = simState.roll;
+            droneGroup.rotation.x = simState.pitch;
+
+            // 2. Realistic 4-Motor Differential RPM Mixing & Inertia
+            const baseRPM = simState.armed ? (4550 + simState.currentAltitude * 160 + simState.verticalVelocity * 650) : 0;
+            const pitchMix = simState.pitch * 900;
+            const rollMix = simState.roll * 900;
+
+            // M1: Front-Left, M2: Front-Right, M3: Rear-Left, M4: Rear-Right
+            simState.targetRPMs = [
+                Math.max(0, baseRPM - pitchMix - rollMix),
+                Math.max(0, baseRPM - pitchMix + rollMix),
+                Math.max(0, baseRPM + pitchMix - rollMix),
+                Math.max(0, baseRPM + pitchMix + rollMix)
+            ];
+
+            propsList.forEach((prop, idx) => {
+                // First-order motor spool inertia
+                simState.motorRPMs[idx] += (simState.targetRPMs[idx] - simState.motorRPMs[idx]) * Math.min(1, dt * 4.5);
+                const rpmFactor = simState.motorRPMs[idx] / 5000;
+                const dir = (idx === 0 || idx === 3) ? 1 : -1;
+                prop.rotation.y += dir * rpmFactor * 26 * dt;
+
+                // Update blur disc opacity naturally with RPM
+                if (blurDiscsList[idx]) {
+                    blurDiscsList[idx].opacity = Math.min(0.24, rpmFactor * 0.18);
+                }
+            });
+
+            // 3. Camera Vision Evaluation & VRT Spray Actuation
+            const sensor = evaluateFieldUnderDrone(simState.posX, simState.posZ);
+            simState.healthPct = sensor.healthPct;
+            simState.aglDistance = sensor.agl;
+            simState.activeZone = sensor.zone;
+
+            const isSpraying = simState.armed && currentMode === 'spray' && sensor.duty > 0 && simState.tankLiters > 0.05;
+            simState.valveDuty = isSpraying ? sensor.duty : 0;
+
+            // Track chemical usage & savings
+            if (currentMode === 'spray' && simState.armed) {
+                simState.totalFlightDistance += stepDist;
+                if (isSpraying) {
+                    simState.sprayedDistance += stepDist * sensor.duty;
+                    const flowRateLps = (1.2 * sensor.duty) / 60;
+                    simState.tankLiters = Math.max(0, simState.tankLiters - flowRateLps * dt);
+                }
+            }
+
+            // Visual Camera FOV Cone & Spray Mist Updates
+            if (scanBeamMesh.visible) {
+                scanBeamMesh.material.opacity = 0.2 + Math.sin(flightTime * 7) * 0.07;
+                if (sensor.duty === 1.0) scanBeamMesh.material.color.setHex(0xf87171);
+                else if (sensor.duty === 0.5) scanBeamMesh.material.color.setHex(0xfacc15);
+                else scanBeamMesh.material.color.setHex(0x38bdf8);
+            }
+
+            sprayParticlesGroup.visible = isSpraying;
+            if (isSpraying) {
+                animateSprayParticles(sensor.duty);
+            }
+
+            // 4. Update Telemetry UI at ~12 Hz for crisp readability
+            if (now - simState.lastTelemetryUpdate > 85) {
+                simState.lastTelemetryUpdate = now;
+                updateTelemetryUI(isSpraying);
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // --- Animate Liquid Mist Particles ---
+        function animateSprayParticles(duty) {
+            const positions = sprayParticlesGroup.children[0].geometry.attributes.position.array;
+            const vels = sprayParticlesGroup.userData.velocities;
+            const activeParticles = Math.floor(SPRAY_COUNT * duty);
+
+            for (let i = 0; i < SPRAY_COUNT; i++) {
+                if (i > activeParticles) {
+                    positions[i * 3 + 1] = -0.35;
+                    continue;
+                }
+                positions[i * 3 + 1] += vels[i].y * (0.8 + duty * 0.4);
+                positions[i * 3] += vels[i].x;
+                positions[i * 3 + 2] += vels[i].z;
+
+                if (positions[i * 3 + 1] < -simState.currentAltitude + 0.1) {
+                    const isLeft = vels[i].isLeft;
+                    positions[i * 3] = isLeft ? -0.6 : 0.6;
+                    positions[i * 3 + 1] = -0.35;
+                    positions[i * 3 + 2] = -0.1;
+                }
+            }
+            sprayParticlesGroup.children[0].geometry.attributes.position.needsUpdate = true;
+        }
+
+        // --- Telemetry Dashboard Updater ---
+        function updateTelemetryUI(isSpraying) {
+            // Clock
+            document.getElementById('telemetry-clock').innerText = new Date().toTimeString().split(' ')[0];
+
+            // Motor RPMs
+            for (let i = 0; i < 4; i++) {
+                const rpmEl = document.getElementById(`rpm-m${i + 1}`);
+                const rpmVal = Math.round(simState.motorRPMs[i]);
+                rpmEl.innerText = rpmVal;
+                rpmEl.className = rpmVal > 100 ? 'text-sky-300 font-bold' : 'text-slate-500 font-bold';
+            }
+
+            // Distance / AGL
+            document.getElementById('telemetry-alt').innerText = simState.aglDistance.toFixed(2) + ' m';
+            const rangeBadge = document.getElementById('range-status');
+            if (!simState.armed) {
+                rangeBadge.innerText = 'ON GROUND';
+                rangeBadge.className = 'text-[9px] font-mono-tech text-slate-400';
+            } else if (simState.aglDistance < 0.7) {
+                rangeBadge.innerText = 'LOW ALT';
+                rangeBadge.className = 'text-[9px] font-mono-tech text-amber-400';
+            } else {
+                rangeBadge.innerText = 'ALT LOCK';
+                rangeBadge.className = 'text-[9px] font-mono-tech text-emerald-400';
+            }
+
+            // Canopy Health Score & Badge
+            const healthEl = document.getElementById('telemetry-health');
+            const healthBadge = document.getElementById('health-badge');
+            healthEl.innerText = `${simState.healthPct}% Green`;
+
+            if (simState.healthPct < 40) {
+                healthBadge.innerText = 'DAMAGED';
+                healthBadge.className = 'text-[9px] font-mono-tech text-red-400';
+            } else if (simState.healthPct < 75) {
+                healthBadge.innerText = 'STRESSED';
+                healthBadge.className = 'text-[9px] font-mono-tech text-yellow-400';
+            } else {
+                healthBadge.innerText = 'OPTIMAL';
+                healthBadge.className = 'text-[9px] font-mono-tech text-emerald-400';
+            }
+
+            // Crop Canopy Zone
+            const zoneEl = document.getElementById('telemetry-zone');
+            zoneEl.innerText = simState.activeZone;
+            if (simState.activeZone.startsWith('Red')) zoneEl.className = 'font-orbitron font-bold text-red-400 text-xs';
+            else if (simState.activeZone.startsWith('Yellow')) zoneEl.className = 'font-orbitron font-bold text-yellow-400 text-xs';
+            else zoneEl.className = 'font-orbitron font-bold text-emerald-400 text-xs';
+
+            // Solenoid Valve & Flow
+            const sprayEl = document.getElementById('telemetry-spray');
+            if (isSpraying) {
+                const flow = (1.2 * simState.valveDuty).toFixed(2);
+                sprayEl.innerText = `OPEN (${flow} L/m)`;
+                sprayEl.className = 'font-orbitron font-bold text-emerald-400 text-xs';
+            } else {
+                sprayEl.innerText = 'CLOSED (0.0 L/m)';
+                sprayEl.className = 'font-orbitron font-bold text-slate-400 text-xs';
+            }
+
+            // Tank Remaining
+            document.getElementById('telemetry-tank').innerText = simState.tankLiters.toFixed(2) + ' L';
+
+            // Chemical Saved Calculation
+            let savedPct = 41.2;
+            if (simState.totalFlightDistance > 1.0) {
+                const rawSaved = (1 - (simState.sprayedDistance / simState.totalFlightDistance)) * 100;
+                savedPct = THREE.MathUtils.clamp(rawSaved, 0, 95);
+            }
+            document.getElementById('telemetry-saved').innerText = savedPct.toFixed(1) + ' %';
+        }
+
+        // Run On Load
+        window.onload = init;
+    </script>
+</body>
+</html>
